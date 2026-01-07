@@ -1,0 +1,5 @@
+{
+  "name": "Hotel Admin Dashboard",
+  "description": "An internal hotel management web application to track daily finances, staff attendance, and monthly summaries with accuracy and clarity.",
+  "requestFramePermissions": []
+}

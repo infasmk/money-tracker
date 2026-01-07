@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HotelPro | Obsidian Edition</title>
+    
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Scripts CDN - Order is critical for Recharts dependencies -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+    <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
+    <script src="https://unpkg.com/jspdf-autotable@latest/dist/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://unpkg.com/xlsx@latest/dist/xlsx.full.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Outfit', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        primary: {"50":"#eff6ff","100":"#dbeafe","200":"#bfdbfe","300":"#93c5fd","400":"#60a5fa","500":"#3b82f6","600":"#2563eb","700":"#1d4ed8","800":"#1e40af","900":"#1e3a8a","950":"#030712"}
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { background-color: #030712; color: #f3f4f6; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+        .mesh-gradient {
+            background-image: radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.1) 0, transparent 50%),
+                              radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0, transparent 50%);
+        }
+        .glass-card { background: rgba(17, 24, 39, 0.6); backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .glass-nav { background: rgba(3, 7, 18, 0.4); backdrop-filter: blur(32px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        .float-anim { animation: float 6s ease-in-out infinite; }
+        
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.11.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "jspdf": "https://esm.sh/jspdf@^4.0.0",
+    "jspdf-autotable": "https://esm.sh/jspdf-autotable@^5.0.7",
+    "xlsx": "https://esm.sh/xlsx@^0.18.5",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.90.0"
+  }
+}
+</script>
+</head>
+<body class="mesh-gradient min-h-screen">
+    <div id="root"></div>
+
+    <script>
+        const { useState, useEffect, useMemo } = React;
+        const h = React.createElement;
+
+        // --- Safe Chart Component Access ---
+        const Chart = {
+            ResponsiveContainer: window.Recharts?.ResponsiveContainer || (() => null),
+            AreaChart: window.Recharts?.AreaChart || (() => null),
+            XAxis: window.Recharts?.XAxis || (() => null),
+            Tooltip: window.Recharts?.Tooltip || (() => null),
+            Area: window.Recharts?.Area || (() => null),
+            BarChart: window.Recharts?.BarChart || (() => null),
+            Bar: window.Recharts?.Bar || (() => null)
+        };
+
+        const formatCurrency = (amt) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amt || 0);
+        const getToday = () => new Date().toISOString().split('T')[0];
+        const formatDate = (ds) => ds ? new Date(ds).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+
+        const Icon = ({ name, size = 20, className = "" }) => {
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
+            return h('i', { "data-lucide": name, className: `inline-block shrink-0 ${className}`, style: { width: size, height: size } });
+        };
+
+        const INITIAL_STAFF = [
+            { id: 'st-1', name: 'Vikram Singh', role: 'Manager', salary: 45000 },
+            { id: 'st-2', name: 'Anjali Sharma', role: 'Receptionist', salary: 22000 },
+            { id: 'st-3', name: 'Rahul Verma', role: 'Head Chef', salary: 35000 }
+        ];
+
+        const App = () => {
+            const [view, setView] = useState('login');
+            const [selectedDate, setSelectedDate] = useState(getToday());
+            const [data, setData] = useState(() => {
+                const saved = localStorage.getItem('hotelpro_data');
+                return saved ? JSON.parse(saved) : { income: [], expenses: [], staff: INITIAL_STAFF, attendance: [] };
+            });
+            const [syncing, setSyncing] = useState(false);
+
+            useEffect(() => {
+                localStorage.setItem('hotelpro_data', JSON.stringify(data));
+            }, [data]);
+
+            const triggerSync = () => {
+                setSyncing(true);
+                setTimeout(() => setSyncing(false), 800);
+            };
+
+            const metrics = useMemo(() => {
+                const dayInc = data.income.filter(i => i.date === selectedDate).reduce((s, c) => s + c.amount, 0);
+                const dayExp = data.expenses.filter(e => e.date === selectedDate).reduce((s, c) => s + c.amount, 0);
+                const present = data.attendance.filter(a => a.date === selectedDate && a.status === 'Present').length;
+                return { income: dayInc, expenses: dayExp, profit: dayInc - dayExp, staffPresent: present };
+            }, [data, selectedDate]);
+
+            const handleLogin = (key) => {
+                if (key === '1234' || key === 'admin') {
+                    setView('dashboard');
+                } else {
+                    alert("ACCESS DENIED");
+                }
+            };
+
+            return h('div', { className: 'max-w-7xl mx-auto px-4 sm:px-10 pb-32' },
+                view === 'login' ? h(LoginView, { onLogin: handleLogin }) : 
+                h(React.Fragment, null,
+                    h(Header, { selectedDate, setSelectedDate, syncing, setView, onLogout: () => setView('login') }),
+                    h('main', { className: 'animate-in fade-in slide-in-from-bottom-4 duration-700' },
+                        view === 'dashboard' && h(DashboardView, { metrics, data }),
+                        view === 'income' && h(LedgerView, { type: 'income', data, setData, selectedDate, triggerSync }),
+                        view === 'expenses' && h(LedgerView, { type: 'expenses', data, setData, selectedDate, triggerSync }),
+                        view === 'staff' && h(StaffView, { data, setData, selectedDate, triggerSync }),
+                        view === 'reports' && h(ReportsView, { data })
+                    ),
+                    h(QuickNav, { current: view, setView })
+                )
+            );
+        };
+
+        const LoginView = ({ onLogin }) => {
+            const [key, setKey] = useState('');
+            return h('div', { className: 'h-screen flex items-center justify-center' },
+                h('div', { className: 'w-full max-w-md glass-card rounded-[3.5rem] p-12 text-center' },
+                    h('div', { className: 'mb-10 inline-block p-6 bg-primary-600 rounded-[2rem] shadow-2xl float-anim' }, h(Icon, { name: 'shield-lock', size: 40, className: 'text-white' })),
+                    h('h1', { className: 'text-3xl font-black text-white uppercase tracking-tighter mb-2' }, 'Personnel Login'),
+                    h('p', { className: 'text-[9px] font-black text-gray-500 uppercase tracking-[0.4em] mb-12' }, 'Enterprise Access Only'),
+                    h('input', { 
+                        type: 'password', 
+                        placeholder: 'Access Key...', 
+                        value: key, 
+                        onChange: e => setKey(e.target.value),
+                        onKeyDown: e => e.key === 'Enter' && onLogin(key),
+                        className: 'w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-center text-white outline-none focus:border-primary-500 transition-all mb-6'
+                    }),
+                    h('button', { 
+                        onClick: () => onLogin(key),
+                        className: 'w-full py-5 bg-primary-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white hover:bg-primary-500 transition-all'
+                    }, 'Authenticate')
+                )
+            );
+        };
+
+        const Header = ({ selectedDate, setSelectedDate, syncing, setView, onLogout }) => h('header', { className: 'pt-8 mb-12 flex flex-col md:flex-row items-center justify-between gap-6' },
+            h('div', { className: 'flex items-center gap-4 cursor-pointer', onClick: () => setView('dashboard') },
+                h('div', { className: 'p-4 bg-primary-600 rounded-2xl shadow-xl' }, h(Icon, { name: 'hotel', className: 'text-white', size: 24 })),
+                h('div', null,
+                    h('h1', { className: 'text-2xl font-black text-white uppercase tracking-tighter' }, 'Hotel', h('span', { className: 'text-primary-500' }, 'Pro')),
+                    h('p', { className: 'text-[9px] font-black text-gray-500 uppercase tracking-[0.4em]' }, 'Obsidian Edition')
+                )
+            ),
+            h('div', { className: 'flex items-center gap-4' },
+                h('div', { className: 'glass-card px-5 py-2.5 rounded-full flex items-center gap-3 border-white/5' },
+                    h(Icon, { name: syncing ? 'refresh-cw' : 'cloud-check', className: syncing ? 'animate-spin text-primary-500' : 'text-emerald-500', size: 14 }),
+                    h('span', { className: 'text-[9px] font-black uppercase tracking-widest text-gray-400' }, syncing ? 'Syncing...' : 'Encrypted')
+                ),
+                h('input', { 
+                    type: 'date', 
+                    value: selectedDate, 
+                    onChange: e => setSelectedDate(e.target.value),
+                    className: 'bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs font-black text-white'
+                }),
+                h('button', { onClick: onLogout, className: 'p-3 bg-white/5 rounded-xl hover:bg-rose-500/10 text-gray-500 hover:text-rose-500 transition-all' }, h(Icon, { name: 'log-out', size: 18 }))
+            )
+        );
+
+        const DashboardView = ({ metrics, data }) => {
+            const chartData = useMemo(() => {
+                return Array.from({ length: 7 }).map((_, i) => {
+                    const d = new Date();
+                    d.setDate(d.getDate() - (6 - i));
+                    const ds = d.toISOString().split('T')[0];
+                    const inc = data.income.filter(x => x.date === ds).reduce((s, c) => s + c.amount, 0);
+                    const exp = data.expenses.filter(x => x.date === ds).reduce((s, c) => s + c.amount, 0);
+                    return { name: d.toLocaleDateString('en-US', { weekday: 'short' }), income: inc, expenses: exp };
+                });
+            }, [data]);
+
+            return h('div', { className: 'space-y-12' },
+                h('div', { className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6' },
+                    h(StatCard, { title: 'Daily Credits', value: formatCurrency(metrics.income), icon: 'trending-up', color: '#10b981' }),
+                    h(StatCard, { title: 'Daily Debits', value: formatCurrency(metrics.expenses), icon: 'trending-down', color: '#f43f5e' }),
+                    h(StatCard, { title: 'Net Yield', value: formatCurrency(metrics.profit), icon: 'wallet', color: '#3b82f6' }),
+                    h(StatCard, { title: 'Team Duty', value: `${metrics.staffPresent}/${data.staff.length}`, icon: 'users', color: '#8b5cf6' })
+                ),
+                h('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-8' },
+                    h('div', { className: 'lg:col-span-2 glass-card rounded-[4rem] p-10' },
+                        h('div', { className: 'flex justify-between items-center mb-10' },
+                            h('div', null,
+                                h('h3', { className: 'text-xl font-black text-white uppercase tracking-tight' }, 'Fiscal Pulse'),
+                                h('p', { className: 'text-[9px] font-black text-gray-500 uppercase tracking-widest' }, '7-Day Flow Analysis')
+                            )
+                        ),
+                        h('div', { className: 'h-[300px]' },
+                            h(Chart.ResponsiveContainer, { width: '100%', height: '100%' },
+                                h(Chart.AreaChart, { data: chartData },
+                                    h(Chart.XAxis, { dataKey: 'name', axisLine: false, tickLine: false, tick: { fill: '#4b5563', fontSize: 10, fontWeight: 800 } }),
+                                    h(Chart.Tooltip, { contentStyle: { background: '#111827', border: 'none', borderRadius: '16px' } }),
+                                    h(Chart.Area, { type: 'monotone', dataKey: 'income', stroke: '#10b981', fill: '#10b98133', strokeWidth: 3 }),
+                                    h(Chart.Area, { type: 'monotone', dataKey: 'expenses', stroke: '#f43f5e', fill: 'transparent', strokeWidth: 3, strokeDasharray: "5 5" })
+                                )
+                            )
+                        )
+                    ),
+                    h('div', { className: 'glass-card rounded-[4rem] p-10 flex flex-col justify-between' },
+                        h('div', null,
+                            h('div', { className: 'p-4 bg-primary-600/10 text-primary-500 rounded-2xl w-fit mb-6' }, h(Icon, { name: 'zap', size: 24 })),
+                            h('h3', { className: 'text-xl font-black text-white uppercase mb-4' }, 'System Audit'),
+                            h('p', { className: 'text-xs font-bold text-gray-500 leading-relaxed' }, 'Registers are balanced. Cloud backup verified. Your margin for today is ' + (metrics.income > 0 ? ((metrics.profit / metrics.income) * 100).toFixed(0) : 0) + '%.')
+                        ),
+                        h('button', { className: 'mt-8 py-5 bg-white/5 border border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-[0.3em] text-gray-400 hover:text-white transition-all' }, 'Full History Log')
+                    )
+                )
+            );
+        };
+
+        const StatCard = ({ title, value, icon, color }) => h('div', { className: 'glass-card rounded-[2.5rem] p-8 group transition-all' },
+            h('div', { className: 'flex justify-between items-start mb-6' },
+                h('div', { className: 'p-3 rounded-xl', style: { backgroundColor: `${color}15`, color: color } }, h(Icon, { name: icon, size: 24 })),
+                h('div', { className: 'h-1.5 w-1.5 rounded-full animate-pulse', style: { backgroundColor: color } })
+            ),
+            h('p', { className: 'text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1' }, title),
+            h('h4', { className: 'text-2xl font-black text-white tracking-tighter' }, value)
+        );
+
+        const LedgerView = ({ type, data, setData, selectedDate, triggerSync }) => {
+            const [showModal, setShowModal] = useState(false);
+            const [form, setForm] = useState({ amount: '', note: '', category: 'General' });
+            const filtered = (type === 'income' ? data.income : data.expenses).filter(x => x.date === selectedDate);
+            const save = () => {
+                const newItem = { id: Date.now(), date: selectedDate, amount: parseFloat(form.amount), note: form.note, category: form.category };
+                setData(prev => ({ ...prev, [type]: [...prev[type], newItem] }));
+                setShowModal(false);
+                setForm({ amount: '', note: '', category: 'General' });
+                triggerSync();
+            };
+            const categories = type === 'income' ? ['Room Rent', 'Restaurant', 'Laundry', 'Misc'] : ['Grocery', 'Utility', 'Salary', 'Maintenance'];
+            return h('div', { className: 'space-y-8' },
+                h('div', { className: 'flex justify-between items-center' },
+                    h('div', null,
+                        h('h2', { className: 'text-3xl font-black text-white uppercase tracking-tighter' }, type),
+                        h('p', { className: 'text-[10px] font-black text-gray-500 uppercase tracking-widest' }, `${filtered.length} Entries Today`)
+                    ),
+                    h('button', { onClick: () => setShowModal(true), className: 'px-8 py-4 bg-primary-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest' }, 'Add Entry')
+                ),
+                h('div', { className: 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' },
+                    filtered.map(item => h('div', { key: item.id, className: 'glass-card p-8 rounded-[2.5rem] relative group' },
+                        h('div', { className: 'flex justify-between items-start mb-4' },
+                            h('div', null,
+                                h('p', { className: 'text-[10px] font-black text-primary-500 uppercase tracking-widest mb-1' }, item.category),
+                                h('h4', { className: 'text-xl font-black text-white' }, formatCurrency(item.amount))
+                            ),
+                            h('button', { onClick: () => setData(prev => ({ ...prev, [type]: prev[type].filter(x => x.id !== item.id) })), className: 'p-2 text-gray-700 hover:text-rose-500' }, h(Icon, { name: 'trash-2', size: 16 }))
+                        ),
+                        h('p', { className: 'text-xs font-bold text-gray-500 italic' }, item.note || 'No audit notes.')
+                    ))
+                ),
+                showModal && h(Modal, { title: `Add ${type}`, onClose: () => setShowModal(false) },
+                    h('div', { className: 'space-y-6' },
+                        h('select', { value: form.category, onChange: e => setForm({...form, category: e.target.value}), className: 'w-full bg-black border border-white/10 rounded-xl p-4 text-white' }, categories.map(c => h('option', { key: c, value: c }, c))),
+                        h('input', { type: 'number', placeholder: 'Amount', value: form.amount, onChange: e => setForm({...form, amount: e.target.value}), className: 'w-full bg-black border border-white/10 rounded-xl p-4 text-white' }),
+                        h('textarea', { placeholder: 'Notes', value: form.note, onChange: e => setForm({...form, note: e.target.value}), className: 'w-full bg-black border border-white/10 rounded-xl p-4 text-white h-24' }),
+                        h('button', { onClick: save, className: 'w-full py-5 bg-primary-600 rounded-xl text-white font-black text-[10px] uppercase tracking-widest' }, 'Confirm Entry')
+                    )
+                )
+            );
+        };
+
+        const StaffView = ({ data, setData, selectedDate, triggerSync }) => {
+            const [mode, setMode] = useState('attendance');
+            const dayAtt = data.attendance.filter(a => a.date === selectedDate);
+            const toggleAttendance = (sid, status) => {
+                const filtered = data.attendance.filter(a => !(a.staff_id === sid && a.date === selectedDate));
+                setData(prev => ({ ...prev, attendance: [...filtered, { staff_id: sid, date: selectedDate, status }] }));
+                triggerSync();
+            };
+            return h('div', { className: 'space-y-10' },
+                h('div', { className: 'flex bg-black/40 p-2 rounded-full w-fit mx-auto' },
+                    h('button', { onClick: () => setMode('attendance'), className: `px-10 py-3 rounded-full text-[9px] font-black uppercase tracking-widest ${mode === 'attendance' ? 'bg-primary-600 text-white' : 'text-gray-500'}` }, 'Attendance'),
+                    h('button', { onClick: () => setMode('list'), className: `px-10 py-3 rounded-full text-[9px] font-black uppercase tracking-widest ${mode === 'list' ? 'bg-primary-600 text-white' : 'text-gray-500'}` }, 'Directory')
+                ),
+                mode === 'attendance' ? h('div', { className: 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' },
+                    data.staff.map(s => {
+                        const status = dayAtt.find(a => a.staff_id === s.id)?.status;
+                        return h('div', { key: s.id, className: `p-8 rounded-[3rem] border ${status === 'Present' ? 'border-emerald-500/20' : 'glass-card'}` },
+                            h('h4', { className: 'text-lg font-black text-white uppercase mb-2' }, s.name),
+                            h('p', { className: 'text-[9px] font-black text-gray-500 uppercase mb-8' }, s.role),
+                            h('div', { className: 'flex gap-3' },
+                                h('button', { onClick: () => toggleAttendance(s.id, 'Present'), className: `flex-1 py-4 rounded-2xl text-[8px] font-black uppercase ${status === 'Present' ? 'bg-emerald-600' : 'bg-white/5 text-gray-500'}` }, 'Present'),
+                                h('button', { onClick: () => toggleAttendance(s.id, 'Absent'), className: `flex-1 py-4 rounded-2xl text-[8px] font-black uppercase ${status === 'Absent' ? 'bg-rose-600' : 'bg-white/5 text-gray-500'}` }, 'Absent')
+                            )
+                        );
+                    })
+                ) : h('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-6' },
+                    data.staff.map(s => h('div', { key: s.id, className: 'glass-card p-8 rounded-[3rem] flex justify-between' },
+                        h('div', null, h('h4', { className: 'text-xl font-black text-white' }, s.name), h('p', { className: 'text-[9px] font-black text-gray-500 uppercase' }, s.role)),
+                        h('div', { className: 'text-right' }, h('p', { className: 'text-xl font-black text-white' }, formatCurrency(s.salary)))
+                    ))
+                )
+            );
+        };
+
+        const ReportsView = ({ data }) => {
+            const handleExport = (type) => {
+                if (type === 'pdf') {
+                    const doc = new window.jspdf.jsPDF();
+                    doc.text("HotelPro Operational Audit", 14, 20);
+                    doc.autoTable({ head: [['Category', 'Value']], body: [['Credits', formatCurrency(data.income.reduce((s,c)=>s+c.amount,0))], ['Debits', formatCurrency(data.expenses.reduce((s,c)=>s+c.amount,0))]] });
+                    doc.save('audit.pdf');
+                } else {
+                    const ws = XLSX.utils.json_to_sheet(data.income);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Data');
+                    XLSX.writeFile(wb, 'audit.xlsx');
+                }
+            };
+            return h('div', { className: 'space-y-12' },
+                h('div', { className: 'glass-card p-10 rounded-[4rem] flex justify-between items-center' },
+                    h('h3', { className: 'text-2xl font-black text-white uppercase' }, 'Audit Center'),
+                    h('div', { className: 'flex gap-4' },
+                        h('button', { onClick: () => handleExport('pdf'), className: 'px-8 py-4 bg-rose-600 text-white rounded-2xl text-[9px] font-black uppercase' }, 'PDF'),
+                        h('button', { onClick: () => handleExport('xlsx'), className: 'px-8 py-4 bg-emerald-600 text-white rounded-2xl text-[9px] font-black uppercase' }, 'XLSX')
+                    )
+                )
+            );
+        };
+
+        const Modal = ({ title, children, onClose }) => h('div', { className: 'fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md' },
+            h('div', { className: 'glass-card w-full max-w-lg rounded-[3rem] p-10 relative' },
+                h('div', { className: 'flex justify-between items-center mb-8' }, h('h3', { className: 'text-xl font-black text-white uppercase' }, title), h('button', { onClick: onClose, className: 'p-2 text-gray-500 hover:text-white' }, h(Icon, { name: 'x', size: 24 }))),
+                children
+            )
+        );
+
+        const QuickNav = ({ current, setView }) => h('div', { className: 'fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] px-6' },
+            h('nav', { className: 'flex items-center gap-1.5 p-2.5 glass-nav rounded-full shadow-2xl' },
+                [
+                    { id: 'dashboard', icon: 'layout-grid' },
+                    { id: 'income', icon: 'arrow-up-circle' },
+                    { id: 'expenses', icon: 'arrow-down-circle' },
+                    { id: 'staff', icon: 'users' },
+                    { id: 'reports', icon: 'file-text' }
+                ].map(item => h('button', {
+                    key: item.id,
+                    onClick: () => setView(item.id),
+                    className: `p-5 rounded-full transition-all ${current === item.id ? 'bg-primary-600 text-white scale-110 shadow-lg' : 'text-gray-500 hover:text-white'}`
+                }, h(Icon, { name: item.icon, size: 22 })))
+            )
+        );
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(h(App));
+    </script>
+</body>
+</html>
