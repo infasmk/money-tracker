@@ -16,7 +16,7 @@ import * as XLSX from 'xlsx';
 
 const Reports: React.FC = () => {
     const { income, expenses } = useData();
-    // Start from 2026 as requested
+    // Default to 2026 for a clean forward-looking start
     const [selectedYear, setSelectedYear] = useState(2026);
     const [selectedMonthIndex, setSelectedMonthIndex] = useState(new Date().getMonth());
 
@@ -66,7 +66,6 @@ const Reports: React.FC = () => {
             ? ((mData.income - prevMonth.income) / prevMonth.income * 100).toFixed(1) 
             : '0';
 
-        // Distribution Mix
         const incomeMix = income.filter(i => {
             const d = new Date(i.date);
             return d.getFullYear() === selectedYear && d.getMonth() === selectedMonthIndex;
@@ -93,7 +92,6 @@ const Reports: React.FC = () => {
         };
     }, [monthlyTrajectory, selectedMonthIndex, income, expenses, selectedYear]);
 
-    // 4. Export Suite
     const handleExportPDF = () => {
         const doc = new jsPDF() as any;
         doc.setFontSize(22);
@@ -135,7 +133,6 @@ const Reports: React.FC = () => {
 
     return (
         <div className="space-y-12 animate-in fade-in slide-in-from-bottom-6 duration-1000 pb-32">
-            {/* Header / Annual Summary */}
             <div className="flex flex-col lg:flex-row justify-between items-stretch gap-8">
                 <div className="flex-1 bg-gray-900/60 p-10 rounded-[4rem] border border-white/5 shadow-2xl relative overflow-hidden flex flex-col justify-between">
                     <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none">
@@ -180,7 +177,6 @@ const Reports: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Year Selector / Controls */}
                 <div className="bg-gray-900/60 p-10 rounded-[4rem] border border-white/5 flex flex-col justify-center items-center gap-6 min-w-[280px]">
                     <div className="p-8 bg-white/5 rounded-full border border-white/5 shadow-inner">
                         <Target size={40} className="text-primary-500" />
@@ -192,29 +188,17 @@ const Reports: React.FC = () => {
                             onChange={(e) => setSelectedYear(parseInt(e.target.value))}
                             className="bg-black border border-white/10 rounded-2xl px-8 py-4 text-xl font-black text-white focus:outline-none focus:ring-4 focus:ring-primary-500/10 cursor-pointer"
                         >
-                            {/* Updated Range: 2026 onwards */}
                             {[2026, 2027, 2028, 2029, 2030].map(y => <option key={y} value={y}>{y} Fiscal</option>)}
                         </select>
                     </div>
                 </div>
             </div>
 
-            {/* Performance Trajectory Visualization */}
             <div className="bg-gray-900/40 p-12 rounded-[4rem] border border-white/5 shadow-2xl">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-12 gap-6">
                     <div>
                         <h3 className="text-2xl font-black text-white uppercase tracking-tight">Financial Trajectory</h3>
                         <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mt-1">12-Month Comparative Yield Chart</p>
-                    </div>
-                    <div className="flex gap-6">
-                        <div className="flex items-center gap-2">
-                            <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
-                            <span className="text-[9px] font-black text-gray-500 uppercase">Gross Credit</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className="h-2 w-2 rounded-full bg-rose-500"></div>
-                            <span className="text-[9px] font-black text-gray-500 uppercase">Operating Debit</span>
-                        </div>
                     </div>
                 </div>
                 <div className="h-[400px]">
@@ -244,9 +228,7 @@ const Reports: React.FC = () => {
                 </div>
             </div>
 
-            {/* Monthly Deep Audit Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-                {/* Ledger Table */}
                 <div className="lg:col-span-2 bg-gray-900/40 p-10 rounded-[4rem] border border-white/5 shadow-2xl flex flex-col">
                     <div className="flex justify-between items-center mb-10">
                         <h3 className="text-sm font-black text-white uppercase tracking-[0.2em] flex items-center gap-3">
@@ -299,9 +281,7 @@ const Reports: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Selected Month Mix Analysis */}
                 <div className="space-y-10">
-                    {/* Growth Card */}
                     <div className="bg-gray-900/40 p-10 rounded-[3.5rem] border border-white/5 shadow-2xl flex items-center justify-between group overflow-hidden relative">
                         <div className="relative z-10">
                             <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest mb-1">MoM Performance</p>
@@ -314,7 +294,6 @@ const Reports: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Distribution Pie */}
                     <div className="bg-gray-900/40 p-10 rounded-[4rem] border border-white/5 shadow-2xl flex flex-col items-center">
                         <div className="flex items-center gap-3 mb-10 w-full">
                             <PieIcon size={18} className="text-primary-500" />
@@ -351,15 +330,11 @@ const Reports: React.FC = () => {
                                     <span className="text-[10px] font-black text-white">{formatCurrency(entry.value)}</span>
                                 </div>
                             ))}
-                            {currentAudit.expenseData.length === 0 && (
-                                <p className="text-center py-4 text-[9px] font-black text-gray-700 uppercase">Awaiting ledger entries...</p>
-                            )}
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Quick Audit Tips / Summary */}
             <div className="bg-primary-600 p-12 rounded-[4rem] text-white shadow-2xl shadow-primary-600/30 flex flex-col md:flex-row items-center justify-between gap-12 group overflow-hidden relative">
                 <div className="absolute -left-10 -top-10 opacity-10 group-hover:scale-125 transition-transform duration-1000">
                     <Calculator size={280} />
@@ -376,10 +351,6 @@ const Reports: React.FC = () => {
                     <div className="p-8 bg-black/20 backdrop-blur-md rounded-[2.5rem] border border-white/10 text-center min-w-[140px]">
                         <p className="text-3xl font-black">94%</p>
                         <p className="text-[8px] font-black opacity-60 uppercase tracking-widest mt-1">Audit Score</p>
-                    </div>
-                    <div className="p-8 bg-black/20 backdrop-blur-md rounded-[2.5rem] border border-white/10 text-center min-w-[140px]">
-                        <p className="text-3xl font-black">Green</p>
-                        <p className="text-[8px] font-black opacity-60 uppercase tracking-widest mt-1">Safety Level</p>
                     </div>
                 </div>
             </div>
