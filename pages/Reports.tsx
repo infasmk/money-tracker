@@ -3,7 +3,8 @@ import React, { useState, useMemo } from 'react';
 import { useData } from '../contexts/DataContext';
 import { formatCurrency, getMonthName } from '../utils/helpers';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { FileText, FileSpreadsheet } from 'lucide-react';
+// Fix: Added missing TrendingDown and Wallet imports
+import { FileText, FileSpreadsheet, PieChart, Activity, TrendingDown, Wallet } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -14,11 +15,11 @@ const Reports: React.FC = () => {
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
 
     const years = useMemo(() => {
-        const allDates = [...income.map(i => i.date), ...expenses.map(e => e.date)];
+        const allDates = [...income.map(i => i.date), ...expenses.map(e => e.date), ...salaryTransactions.map(s => s.date)];
         if (allDates.length === 0) return [new Date().getFullYear()];
         const allYears = [...new Set(allDates.map(d => new Date(d).getFullYear()))];
         return Array.from(allYears).sort((a,b) => b-a);
-    }, [income, expenses]);
+    }, [income, expenses, salaryTransactions]);
 
     const reportData = useMemo(() => {
         const monthlyIncome = income.filter(i => {
@@ -26,7 +27,7 @@ const Reports: React.FC = () => {
             return d.getFullYear() === selectedYear && d.getMonth() === selectedMonth;
         }).reduce((sum, i) => sum + i.amount, 0);
 
-        const monthlyExpenses = expenses.filter(e => {
+        const monthlyExpLedger = expenses.filter(e => {
             const d = new Date(e.date);
             return d.getFullYear() === selectedYear && d.getMonth() === selectedMonth;
         }).reduce((sum, e) => sum + e.amount, 0);
@@ -36,9 +37,10 @@ const Reports: React.FC = () => {
             return d.getFullYear() === selectedYear && d.getMonth() === selectedMonth;
         }).reduce((sum, s) => sum + s.amount, 0);
 
-        const netProfit = monthlyIncome - monthlyExpenses;
+        const totalExpenses = monthlyExpLedger + monthlySalaries;
+        const netProfit = monthlyIncome - totalExpenses;
 
-        return { monthlyIncome, monthlyExpenses, monthlySalaries, netProfit };
+        return { monthlyIncome, monthlyExpenses: totalExpenses, monthlySalaries, netProfit };
     }, [income, expenses, salaryTransactions, selectedYear, selectedMonth]);
 
     const yearlyChartData = useMemo(() => {
@@ -61,13 +63,19 @@ const Reports: React.FC = () => {
                 data[d.getMonth()].expenses += e.amount;
             }
         });
+        salaryTransactions.forEach(s => {
+            const d = new Date(s.date);
+            if (d.getFullYear() === selectedYear) {
+                data[d.getMonth()].expenses += s.amount;
+            }
+        });
         
         data.forEach(month => {
             month.profit = month.income - month.expenses;
         });
 
         return data;
-    }, [income, expenses, selectedYear]);
+    }, [income, expenses, salaryTransactions, selectedYear]);
     
     const handleExportPDF = () => {
         try {
@@ -85,8 +93,8 @@ const Reports: React.FC = () => {
                 head: [['Financial Category', 'Metric Value']],
                 body: [
                     ['Total Monthly Income', formatCurrency(reportData.monthlyIncome)],
-                    ['Total Operational Expenses', formatCurrency(reportData.monthlyExpenses)],
-                    ['Staff Salaries Distributed', formatCurrency(reportData.monthlySalaries)],
+                    ['Total Operational Expenses (Ledger + Salaries)', formatCurrency(reportData.monthlyExpenses)],
+                    ['Total Salaries/Advances Distributed', formatCurrency(reportData.monthlySalaries)],
                     ['Net Operational Surplus', formatCurrency(reportData.netProfit)],
                 ],
                 theme: 'striped',
@@ -104,10 +112,9 @@ const Reports: React.FC = () => {
                 }
             });
 
-            doc.save(`HotelReport-${monthName}-${selectedYear}.pdf`);
+            doc.save(`HotelPro_Report_${monthName}_${selectedYear}.pdf`);
         } catch (error) {
             console.error('PDF Generation failed:', error);
-            alert('Failed to generate PDF. Please try again.');
         }
     };
 
@@ -123,98 +130,95 @@ const Reports: React.FC = () => {
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Financial Summary');
-            XLSX.writeFile(wb, `HotelFinancials-${monthName}-${selectedYear}.xlsx`);
+            XLSX.writeFile(wb, `HotelPro_Audit_${monthName}_${selectedYear}.xlsx`);
         } catch (error) {
             console.error('Excel export failed:', error);
-            alert('Excel export failed. Please check data.');
         }
     };
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500 pb-20">
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-sm border border-gray-100 dark:border-gray-700">
-                <div className="flex flex-col lg:flex-row justify-between items-center mb-10 gap-6">
+        <div className="space-y-12 animate-in fade-in duration-500 pb-32">
+            <div className="bg-gray-900/50 p-10 rounded-[4rem] border border-white/5 shadow-2xl backdrop-blur-3xl">
+                <div className="flex flex-col lg:flex-row justify-between items-center mb-12 gap-8">
                     <div>
-                        <h2 className="text-xl font-black dark:text-white uppercase tracking-tight mb-1">Financial Audits</h2>
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Monthly aggregation & performance metrics</p>
+                        <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-2">Audit Hub</h2>
+                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em]">Annual reconciliation & fiscal trajectory</p>
                     </div>
-                    <div className="flex flex-wrap justify-center gap-4">
+                    <div className="flex flex-wrap justify-center gap-4 bg-black/40 p-2 rounded-[2.5rem] border border-white/5">
                         <select 
                             value={selectedMonth} 
                             onChange={(e) => setSelectedMonth(Number(e.target.value))} 
-                            className="p-3 bg-gray-50 dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-xl text-sm font-bold min-w-[140px]"
+                            className="bg-transparent text-[11px] font-black text-primary-500 uppercase tracking-widest px-6 py-4 outline-none cursor-pointer"
                         >
                             {Array.from({ length: 12 }).map((_, i) => (
-                                <option key={i} value={i}>{getMonthName(i)}</option>
+                                <option key={i} value={i} className="bg-black">{getMonthName(i)}</option>
                             ))}
                         </select>
                         <select 
                             value={selectedYear} 
                             onChange={(e) => setSelectedYear(Number(e.target.value))} 
-                            className="p-3 bg-gray-50 dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-xl text-sm font-bold min-w-[100px]"
+                            className="bg-transparent text-[11px] font-black text-primary-500 uppercase tracking-widest px-6 py-4 outline-none cursor-pointer"
                         >
-                            {years.map(y => <option key={y} value={y}>{y}</option>)}
+                            {years.map(y => <option key={y} value={y} className="bg-black">{y}</option>)}
                         </select>
-                        <div className="h-10 w-px bg-gray-100 dark:bg-gray-700 hidden sm:block"></div>
                         <div className="flex gap-2">
-                            <button onClick={handleExportPDF} className="flex items-center gap-2 px-6 py-3 text-[10px] font-black text-white bg-rose-600 rounded-2xl hover:bg-rose-700 uppercase tracking-widest transition-all shadow-xl shadow-rose-600/20 active:scale-95">
-                               <FileText size={16}/> PDF
+                            <button onClick={handleExportPDF} className="flex items-center gap-3 px-8 py-4 bg-rose-600 text-white rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-xl shadow-rose-600/20 active:scale-95">
+                               <FileText size={14}/> PDF
                             </button>
-                             <button onClick={handleExportExcel} className="flex items-center gap-2 px-6 py-3 text-[10px] font-black text-white bg-emerald-600 rounded-2xl hover:bg-emerald-700 uppercase tracking-widest transition-all shadow-xl shadow-emerald-600/20 active:scale-95">
-                               <FileSpreadsheet size={16}/> Excel
+                             <button onClick={handleExportExcel} className="flex items-center gap-3 px-8 py-4 bg-emerald-600 text-white rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-600/20 active:scale-95">
+                               <FileSpreadsheet size={14}/> Excel
                             </button>
                         </div>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <div className="p-8 bg-blue-50/50 dark:bg-blue-900/20 rounded-[2rem] border border-blue-100/50 dark:border-blue-800/20">
-                        <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-3">Total Income</p>
-                        <p className="text-2xl font-black text-blue-900 dark:text-blue-100">{formatCurrency(reportData.monthlyIncome)}</p>
+                    <div className="p-10 bg-emerald-500/5 rounded-[3rem] border border-emerald-500/10 hover:bg-emerald-500/10 transition-all">
+                        <div className="p-3 bg-emerald-500 text-white rounded-2xl w-fit mb-6"><Activity size={20} /></div>
+                        <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Monthly Credits</p>
+                        <p className="text-3xl font-black text-white">{formatCurrency(reportData.monthlyIncome)}</p>
                     </div>
-                    <div className="p-8 bg-amber-50/50 dark:bg-amber-900/20 rounded-[2rem] border border-amber-100/50 dark:border-amber-800/20">
-                        <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-3">Total Expenses</p>
-                        <p className="text-2xl font-black text-amber-900 dark:text-amber-100">{formatCurrency(reportData.monthlyExpenses)}</p>
+                    <div className="p-10 bg-rose-500/5 rounded-[3rem] border border-rose-500/10 hover:bg-rose-500/10 transition-all">
+                        <div className="p-3 bg-rose-500 text-white rounded-2xl w-fit mb-6"><TrendingDown size={20} /></div>
+                        <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-2">Total Debits</p>
+                        <p className="text-3xl font-black text-white">{formatCurrency(reportData.monthlyExpenses)}</p>
                     </div>
-                    <div className="p-8 bg-rose-50/50 dark:bg-rose-900/20 rounded-[2rem] border border-rose-100/50 dark:border-rose-800/20">
-                        <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-3">Salaries Paid</p>
-                        <p className="text-2xl font-black text-rose-900 dark:text-rose-100">{formatCurrency(reportData.monthlySalaries)}</p>
+                    <div className="p-10 bg-primary-500/5 rounded-[3rem] border border-primary-500/10 hover:bg-primary-500/10 transition-all">
+                        <div className="p-3 bg-primary-500 text-white rounded-2xl w-fit mb-6"><Wallet size={20} /></div>
+                        <p className="text-[10px] font-black text-primary-500 uppercase tracking-widest mb-2">Salaries Paid</p>
+                        <p className="text-3xl font-black text-white">{formatCurrency(reportData.monthlySalaries)}</p>
                     </div>
-                    <div className="p-8 bg-emerald-50/50 dark:bg-emerald-900/20 rounded-[2rem] border border-emerald-100/50 dark:border-emerald-800/20">
-                        <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-3">Net Surplus</p>
-                        <p className="text-2xl font-black text-emerald-900 dark:text-emerald-100">{formatCurrency(reportData.netProfit)}</p>
+                    <div className="p-10 bg-purple-500/5 rounded-[3rem] border border-purple-500/10 hover:bg-purple-500/10 transition-all">
+                        <div className="p-3 bg-purple-500 text-white rounded-2xl w-fit mb-6"><PieChart size={20} /></div>
+                        <p className="text-[10px] font-black text-purple-500 uppercase tracking-widest mb-2">Net Surplus</p>
+                        <p className="text-3xl font-black text-white">{formatCurrency(reportData.netProfit)}</p>
                     </div>
                 </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-[3rem] shadow-sm border border-gray-100 dark:border-gray-700">
-                <div className="mb-8">
-                    <h3 className="text-sm font-black text-gray-400 uppercase tracking-[0.2em]">Annual Yield Trajectory</h3>
-                    <p className="text-[10px] font-black text-primary-500 uppercase tracking-widest mt-1">Fiscal Performance Breakdown for {selectedYear}</p>
+            <div className="bg-gray-900/50 p-10 rounded-[4rem] border border-white/5 shadow-2xl">
+                <div className="mb-12">
+                    <h3 className="text-xl font-black text-white uppercase tracking-tighter">Annual Performance Curve</h3>
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-2">Fiscal year {selectedYear} visualization</p>
                 </div>
                 <div className="h-[450px]">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={yearlyChartData}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(128, 128, 128, 0.05)" />
-                            <XAxis dataKey="name" fontSize={11} tickLine={false} axisLine={false} tick={{fill: '#94a3b8', fontWeight: 900}} />
-                            <YAxis fontSize={11} tickLine={false} axisLine={false} tick={{fill: '#94a3b8', fontWeight: 900}} tickFormatter={(value) => `₹${Number(value)/1000}k`}/>
+                            <XAxis dataKey="name" fontSize={10} tickLine={false} axisLine={false} tick={{fill: '#4b5563', fontWeight: 900}} />
+                            <YAxis hide />
                             <Tooltip
-                                formatter={(value: number) => formatCurrency(value)}
-                                cursor={{ fill: 'rgba(59, 130, 246, 0.03)' }}
                                 contentStyle={{
-                                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                                    borderRadius: '20px',
-                                    border: 'none',
-                                    boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
+                                    backgroundColor: '#111827',
+                                    borderRadius: '24px',
+                                    border: '1px solid rgba(255,255,255,0.05)',
                                     fontWeight: '900',
-                                    fontSize: '12px'
+                                    fontSize: '11px'
                                 }}
-                                labelStyle={{ fontWeight: '900', color: '#1e293b', marginBottom: '8px' }}
+                                cursor={{ fill: 'rgba(255, 255, 255, 0.02)' }}
                              />
-                            <Legend wrapperStyle={{fontSize: "10px", fontWeight: "900", paddingTop: "20px", textTransform: "uppercase", letterSpacing: "1px"}}/>
-                            <Bar dataKey="income" fill="#10b981" name="Income Flow" radius={[6, 6, 0, 0]} />
-                            <Bar dataKey="expenses" fill="#ef4444" name="Expenditure" radius={[6, 6, 0, 0]} />
-                            <Bar dataKey="profit" fill="#3b82f6" name="Net Yield" radius={[6, 6, 0, 0]}/>
+                            <Legend wrapperStyle={{fontSize: "10px", fontWeight: "900", paddingTop: "30px", textTransform: "uppercase"}}/>
+                            <Bar dataKey="income" fill="#10b981" name="Income" radius={[8, 8, 0, 0]} barSize={24} />
+                            <Bar dataKey="expenses" fill="#ef4444" name="Expenditure" radius={[8, 8, 0, 0]} barSize={24} />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
