@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { useData } from '../contexts/DataContext';
-import { Calendar as CalendarIcon, Hotel, RotateCcw, ShieldCheck, Cloud, CloudUpload } from 'lucide-react';
+import { Calendar as CalendarIcon, Hotel, Home, RotateCcw, ShieldCheck, Activity, CloudCheck, CloudUpload } from 'lucide-react';
 import { formatDate, getTodayDateString } from '../utils/helpers';
 
 const Header: React.FC = () => {
@@ -13,16 +13,21 @@ const Header: React.FC = () => {
     const isToday = selectedDate === getTodayDateString();
 
     const triggerDatePicker = () => {
+        // Fix: Use a local variable to help TypeScript with type narrowing and avoid 'never' type errors in catch blocks.
         const input = dateInputRef.current;
         if (input) {
             try {
                 input.focus();
+                // Check for modern showPicker API with proper casting for type compatibility.
                 if ('showPicker' in input) {
                     (input as any).showPicker();
                 } else {
+                    // Fix: Explicitly cast to any to avoid narrowing to 'never' inside the else block.
                     (input as any).click();
                 }
             } catch (e) {
+                // Fallback for browsers without showPicker or where it throws.
+                // Fix: Explicitly cast to any to avoid narrowing to 'never' inside the catch block.
                 (input as any).click();
             }
         }
@@ -46,7 +51,7 @@ const Header: React.FC = () => {
                 <div className="flex items-center space-x-4">
                     {/* Cloud Sync Pulse */}
                     <div className={`flex items-center gap-3 px-4 py-2 border rounded-xl transition-all duration-500 ${isSyncing ? 'bg-primary-500/10 border-primary-500/20 shadow-lg shadow-primary-500/10' : 'bg-emerald-500/5 border-emerald-500/10'}`}>
-                        {isSyncing ? <CloudUpload size={14} className="text-primary-500 animate-bounce" /> : <Cloud size={14} className="text-emerald-500" />}
+                        {isSyncing ? <CloudUpload size={14} className="text-primary-500 animate-bounce" /> : <CloudCheck size={14} className="text-emerald-500" />}
                         <span className={`text-[8px] font-black uppercase tracking-[0.2em] hidden sm:inline ${isSyncing ? 'text-primary-500' : 'text-emerald-500'}`}>
                             {isSyncing ? 'Syncing...' : 'Cloud Verified'}
                         </span>

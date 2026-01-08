@@ -1,10 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useData } from '../contexts/DataContext';
-import { Calendar, User, Briefcase, IndianRupee, ArrowLeft, PlusCircle, CheckCircle2, XCircle, TrendingDown, Receipt, Wallet, Loader2, PieChart as PieChartIcon, BarChart3 } from 'lucide-react';
+import { Calendar, User, Briefcase, IndianRupee, ArrowLeft, PlusCircle, CheckCircle2, XCircle, TrendingDown, Receipt, Wallet, Loader2 } from 'lucide-react';
 import { formatDate, formatCurrency, getTodayDateString } from '../utils/helpers';
 import { SalaryTransaction, SalaryTransactionType, ExpenseCategory, PaymentMode, ExpenseEntry } from '../types';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import Modal from '../components/Modal';
 
 const StaffDetail: React.FC = () => {
@@ -18,54 +17,52 @@ const StaffDetail: React.FC = () => {
 
     // Precise monthly financial calculations
     const currentMonthStats = useMemo(() => {
-        if (!member) return { totalPaidThisMonth: 0, balance: 0, attendanceScore: 0, presents: 0, absents: 0, totalDays: 0 };
+        if (!member) return { totalPaidThisMonth: 0, balance: 0, attendanceScore: 0, presents: 0, totalDays: 0 };
         
         const now = new Date();
         const currentMonth = now.getMonth();
         const currentYear = now.getFullYear();
 
-        const monthAttendance = attendance.filter(a => {
-            const d = new Date(a.date);
-            return a.staff_id === id && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-        });
-
-        const presents = monthAttendance.filter(a => a.status === 'Present').length;
-        const absents = monthAttendance.filter(a => a.status === 'Absent').length;
-        const score = monthAttendance.length > 0 ? Math.round((presents / monthAttendance.length) * 100) : 0;
-
-        // Month-to-date stats
+        // Fix: Use staff_id instead of staffId
         const monthTxs = salaryTransactions.filter(st => {
             const d = new Date(st.date);
             return st.staff_id === id && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
         });
 
         const totalPaid = monthTxs.reduce((sum, t) => sum + t.amount, 0);
+        // Fix: Use monthly_salary instead of monthlySalary
         const balance = member.monthly_salary - totalPaid;
+
+        // Fix: Use staff_id instead of staffId
+        const monthAttendance = attendance.filter(a => {
+            const d = new Date(a.date);
+            return a.staff_id === id && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        });
+
+        const presents = monthAttendance.filter(a => a.status === 'Present').length;
+        const score = monthAttendance.length > 0 ? Math.round((presents / monthAttendance.length) * 100) : 0;
 
         return { 
             totalPaidThisMonth: totalPaid, 
             balance: Math.max(0, balance), 
             attendanceScore: score,
             presents,
-            absents,
             totalDays: monthAttendance.length
         };
     }, [member, salaryTransactions, attendance, id]);
 
-    const attendanceChartData = useMemo(() => [
-        { name: 'Present', value: currentMonthStats.presents, color: '#10b981' },
-        { name: 'Absent', value: currentMonthStats.absents, color: '#f43f5e' }
-    ], [currentMonthStats]);
-
     const memberSalaryTxs = useMemo(() => {
+        // Fix: Use staff_id instead of staffId
         return salaryTransactions.filter(st => st.staff_id === id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [salaryTransactions, id]);
 
     const memberAttendance = useMemo(() => {
+        // Fix: Use staff_id instead of staffId
         return attendance.filter(a => a.staff_id === id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [attendance, id]);
 
     const handleOpenModal = () => {
+        // Fix: Use staff_id instead of staffId
         setCurrentTransaction({ staff_id: id, date: getTodayDateString(), type: SalaryTransactionType.ADVANCE, amount: 0 });
         setIsModalOpen(true);
     };
@@ -87,18 +84,22 @@ const StaffDetail: React.FC = () => {
             id: txId,
         } as SalaryTransaction;
         
+        // 1. Log to Salary Ledger locally
         setSalaryTransactions(prev => [...prev, newTransaction]);
 
+        // 2. CRITICAL SYNC: Auto-log to Expenses Ledger locally
         const newExpense: ExpenseEntry = {
             id: `pay-sync-${txId}`,
             date: newTransaction.date,
             category: ExpenseCategory.SALARY,
             amount: newTransaction.amount,
+            // Fix: Use payment_mode instead of paymentMode
             payment_mode: PaymentMode.ONLINE,
             notes: `[PAYROLL-AUTO] ${newTransaction.type} for ${member.name}. Memo: ${newTransaction.notes || 'None'}`
         };
         setExpenses(prev => [...prev, newExpense]);
 
+        // 3. PERSIST TO CLOUD
         try {
             await Promise.all([
                 syncToCloud('salary_transactions', newTransaction),
@@ -138,11 +139,13 @@ const StaffDetail: React.FC = () => {
                     <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-3">{member.name}</h2>
                     <div className="flex flex-wrap justify-center lg:justify-start gap-4">
                         <span className="px-5 py-2 bg-primary-500/10 text-primary-400 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-primary-500/20">{member.role}</span>
+                        {/* Fix: Use joining_date instead of joiningDate */}
                         <span className="px-5 py-2 bg-white/5 text-gray-500 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-white/5">Joined {formatDate(member.joining_date)}</span>
                     </div>
                 </div>
                 <div className="bg-black/40 p-8 rounded-[2.5rem] border border-white/5 min-w-[240px] text-center shadow-inner">
                     <p className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] mb-2">Base Salary</p>
+                    {/* Fix: Use monthly_salary instead of monthlySalary */}
                     <p className="text-3xl font-black text-white">{formatCurrency(member.monthly_salary)}</p>
                 </div>
             </div>
@@ -209,55 +212,31 @@ const StaffDetail: React.FC = () => {
                 </div>
 
                 <div className="space-y-8">
-                    {/* Attendance Analysis */}
+                    {/* Monthly Attendance History */}
                     <div className="bg-gray-900 p-8 sm:p-10 rounded-[3.5rem] border border-white/5 shadow-2xl">
                         <div className="flex items-center gap-4 mb-10">
                             <div className="p-4 bg-emerald-500/10 text-emerald-500 rounded-2xl shadow-inner">
-                                <BarChart3 size={24} />
+                                <CheckCircle2 size={24} />
                             </div>
                             <div>
-                                <h3 className="text-sm font-black text-white uppercase tracking-tight">Efficiency Mix</h3>
-                                <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Current Month Distribution</p>
+                                <h3 className="text-sm font-black text-white uppercase tracking-tight">Efficiency Score</h3>
+                                <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Attendance Logs</p>
                             </div>
                         </div>
 
-                        <div className="h-64 mb-10">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={attendanceChartData}>
-                                    <XAxis 
-                                        dataKey="name" 
-                                        axisLine={false} 
-                                        tickLine={false} 
-                                        tick={{ fill: '#6b7280', fontSize: 10, fontWeight: 800 }} 
-                                    />
-                                    <YAxis hide domain={[0, 'auto']} />
-                                    <Tooltip 
-                                        cursor={{ fill: 'rgba(255,255,255,0.02)' }}
-                                        contentStyle={{ backgroundColor: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', fontSize: '10px', fontWeight: '900' }}
-                                    />
-                                    <Bar dataKey="value" radius={[10, 10, 0, 0]} barSize={40}>
-                                        {attendanceChartData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        <div className="flex items-center justify-between p-6 bg-black/30 rounded-3xl border border-white/5">
+                        <div className="flex items-center justify-between mb-10 p-6 bg-black/30 rounded-3xl border border-white/5">
                             <div className="text-center">
-                                <p className="text-3xl font-black text-emerald-500">{currentMonthStats.attendanceScore}%</p>
-                                <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest mt-2">Punctuality</p>
+                                <p className="text-4xl font-black text-emerald-500">{currentMonthStats.attendanceScore}%</p>
+                                <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest mt-2">Active Ratio</p>
                             </div>
                             <div className="h-12 w-px bg-white/5"></div>
                             <div className="text-right">
-                                <p className="text-xl font-black text-white">{currentMonthStats.presents} <span className="text-gray-700">Present</span></p>
-                                <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest mt-2">{currentMonthStats.totalDays} Total Days</p>
+                                <p className="text-2xl font-black text-white">{currentMonthStats.presents} <span className="text-gray-700">/ {currentMonthStats.totalDays}</span></p>
+                                <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest mt-2">Days Logged</p>
                             </div>
                         </div>
 
-                        <div className="mt-8 space-y-3 max-h-[280px] overflow-y-auto pr-3 custom-scrollbar">
-                            <p className="text-[9px] font-black text-gray-500 uppercase tracking-[0.3em] px-2 mb-4">Historical Logs</p>
+                        <div className="space-y-3 max-h-[360px] overflow-y-auto pr-3 custom-scrollbar">
                             {memberAttendance.map(att => (
                                 <div key={att.id} className="flex justify-between items-center p-5 bg-white/5 rounded-2xl border border-transparent hover:border-white/5 transition-all">
                                     <span className="text-xs font-bold text-gray-500">{formatDate(att.date)}</span>
@@ -342,6 +321,7 @@ const StaffDetail: React.FC = () => {
                 </form>
             </Modal>
 
+            {/* Fix: Standardized style tag by removing the non-standard jsx attribute */}
             <style>{`
                 .form-input {
                     display: block;
