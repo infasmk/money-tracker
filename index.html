@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>HotelPro | Obsidian Edition</title>
+    <title>HotelPro | Enterprise Ledger</title>
     
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     
@@ -25,17 +25,14 @@
     <style>
         body { background-color: #030712; color: #f3f4f6; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
         .mesh-gradient {
-            background-image: radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.1) 0, transparent 50%),
-                              radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0, transparent 50%);
+            background-image: radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.08) 0, transparent 50%),
+                              radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.05) 0, transparent 50%);
         }
         .glass-card { background: rgba(17, 24, 39, 0.6); backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.05); }
         .glass-nav { background: rgba(3, 7, 18, 0.4); backdrop-filter: blur(32px); border: 1px solid rgba(255, 255, 255, 0.08); }
         
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-        
-        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-        .float-anim { animation: float 6s ease-in-out infinite; }
         
         input[type="date"]::-webkit-calendar-picker-indicator { 
             filter: invert(1); 
@@ -44,14 +41,18 @@
             border-radius: 4px;
         }
 
-        .shimmer {
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
-            background-size: 200% 100%;
-            animation: shimmer 2s infinite linear;
+        @keyframes pulse-ring {
+            0% { transform: scale(0.33); }
+            80%, 100% { opacity: 0; }
         }
-        @keyframes shimmer {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
+        .animate-pulse-ring::before {
+            content: '';
+            position: absolute;
+            width: 300%;
+            height: 300%;
+            border-radius: 50%;
+            background-color: currentColor;
+            animation: pulse-ring 1.25s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
         }
     </style>
 <script type="importmap">
@@ -60,15 +61,15 @@
     "react": "https://esm.sh/react@18.2.0",
     "react-dom": "https://esm.sh/react-dom@18.2.0",
     "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-    "react-router-dom": "https://esm.sh/react-router-dom@6.11.2",
+    "react-router-dom": "https://esm.sh/react-router-dom@6.11.2?external=react,react-dom",
     "lucide-react": "https://esm.sh/lucide-react@0.344.0?external=react",
     "recharts": "https://esm.sh/recharts@2.12.2?external=react,react-dom",
+    "jspdf": "https://esm.sh/jspdf@2.5.1",
+    "jspdf-autotable": "https://esm.sh/jspdf-autotable@3.5.28?external=jspdf",
+    "xlsx": "https://esm.sh/xlsx@0.18.5",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.42.0",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "jspdf": "https://esm.sh/jspdf@^4.0.0",
-    "jspdf-autotable": "https://esm.sh/jspdf-autotable@^5.0.7",
-    "xlsx": "https://esm.sh/xlsx@^0.18.5",
-    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.90.0"
+    "react/": "https://esm.sh/react@^19.2.3/"
   }
 }
 </script>

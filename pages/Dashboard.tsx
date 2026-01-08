@@ -12,312 +12,298 @@ import {
     Activity,
     ChevronRight,
     PieChart,
-    ChevronDown
+    ChevronDown,
+    ArrowDownRight,
+    Clock,
+    Zap,
+    Target
 } from 'lucide-react';
 import { formatDate, getTodayDateString, formatCurrency, getMonthName } from '../utils/helpers';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, AreaChart, Area } from 'recharts';
 import { AttendanceStatus } from '../types';
 import { Link } from 'react-router-dom';
 import Modal from '../components/Modal';
 
-const SkeletonCard = () => (
-    <div className="bg-gray-900/50 p-8 rounded-[2.5rem] border border-white/5 animate-pulse h-44"></div>
+const MetricCard = ({ title, value, subtext, icon: Icon, color, delta }: any) => (
+    <div className="group bg-gray-900/40 p-8 rounded-[3rem] border border-white/5 hover:border-white/10 transition-all duration-500 relative overflow-hidden flex flex-col justify-between h-full shadow-2xl">
+        <div className="absolute top-0 right-0 p-8 opacity-0 group-hover:opacity-10 transition-opacity transform group-hover:scale-150 duration-700">
+            <Icon size={120} />
+        </div>
+        <div>
+            <div className="flex justify-between items-start mb-6">
+                <div className={`p-4 rounded-2xl shadow-xl`} style={{ backgroundColor: `${color}15`, color: color }}>
+                    <Icon size={24} strokeWidth={2.5} />
+                </div>
+                {delta && (
+                    <div className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${delta > 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                        {delta > 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
+                        {Math.abs(delta)}%
+                    </div>
+                )}
+            </div>
+            <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-2">{title}</p>
+            <h3 className="text-4xl font-black text-white tracking-tighter mb-2">{value}</h3>
+        </div>
+        <p className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">{subtext}</p>
+    </div>
 );
 
 export default function Dashboard() {
     const { income, expenses, attendance, staff, salaryTransactions, selectedDate, setSelectedDate, isLoading } = useData();
     const [showMonthlyModal, setShowMonthlyModal] = useState(false);
+    const [greeting, setGreeting] = useState('');
     const isToday = selectedDate === getTodayDateString();
     const dateInputRef = useRef<HTMLInputElement>(null);
-    const [greeting, setGreeting] = useState('');
 
     useEffect(() => {
         const hour = new Date().getHours();
-        if (hour < 12) setGreeting('GM');
-        else if (hour < 17) setGreeting('GA');
-        else setGreeting('GE');
+        if (hour < 12) setGreeting('Good Morning');
+        else if (hour < 17) setGreeting('Good Afternoon');
+        else setGreeting('Good Evening');
     }, []);
 
     const dailyMetrics = useMemo(() => {
-        const dailyInc = income
-            .filter(item => item.date === selectedDate)
-            .reduce((acc, curr) => acc + curr.amount, 0);
-            
-        const dailyExp = expenses
-            .filter(item => item.date === selectedDate)
-            .reduce((acc, curr) => acc + curr.amount, 0);
-            
-        const dailyAtt = attendance
-            .filter(item => item.date === selectedDate && item.status === AttendanceStatus.PRESENT)
-            .length;
-
-        const profit = dailyInc - dailyExp;
-        const margin = dailyInc > 0 ? (profit / dailyInc) * 100 : 0;
+        const todayInc = income.filter(i => i.date === selectedDate).reduce((s, c) => s + c.amount, 0);
+        const todayExp = expenses.filter(e => e.date === selectedDate).reduce((s, c) => s + c.amount, 0);
+        const todayAtt = attendance.filter(a => a.date === selectedDate && a.status === AttendanceStatus.PRESENT).length;
+        const profit = todayInc - todayExp;
+        const margin = todayInc > 0 ? ((profit / todayInc) * 100).toFixed(1) : '0';
 
         return {
-            income: dailyInc,
-            expenses: dailyExp,
-            profit: profit,
-            staffPresent: dailyAtt,
+            income: todayInc,
+            expenses: todayExp,
+            profit,
+            staffPresent: todayAtt,
             totalStaff: staff.length,
-            margin: margin.toFixed(0)
+            margin
         };
     }, [income, expenses, attendance, staff, selectedDate]);
 
-    const monthlySummary = useMemo(() => {
-        const data: { [key: string]: { income: number, expenses: number } } = {};
-        const baseDate = new Date(selectedDate);
+    const liveFeed = useMemo(() => {
+        const all = [
+            ...income.map(i => ({ ...i, type: 'CR', category: i.source, color: '#10b981' })),
+            ...expenses.map(e => ({ ...e, type: 'DR', color: '#f43f5e' })),
+            ...salaryTransactions.map(s => ({ ...s, type: 'DR', category: 'Payroll', color: '#3b82f6' }))
+        ];
+        return all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 6);
+    }, [income, expenses, salaryTransactions]);
 
-        for (let i = 0; i < 6; i++) {
-            const date = new Date(baseDate.getFullYear(), baseDate.getMonth() - i, 1);
-            const monthName = date.toLocaleString('default', { month: 'short' });
-            data[monthName] = { income: 0, expenses: 0 };
-        }
-
-        income.forEach(item => {
-            const entryDate = new Date(item.date);
-            const monthName = entryDate.toLocaleString('default', { month: 'short' });
-            if (data[monthName]) data[monthName].income += item.amount;
+    const chartData = useMemo(() => {
+        const months = Array.from({ length: 6 }).map((_, i) => {
+            const d = new Date();
+            d.setMonth(d.getMonth() - (5 - i));
+            return {
+                name: d.toLocaleString('default', { month: 'short' }),
+                month: d.getMonth(),
+                year: d.getFullYear(),
+                revenue: 0,
+                burn: 0
+            };
         });
 
-        expenses.forEach(item => {
-            const entryDate = new Date(item.date);
-            const monthName = entryDate.toLocaleString('default', { month: 'short' });
-            if (data[monthName]) data[monthName].expenses += item.amount;
+        income.forEach(i => {
+            const idate = new Date(i.date);
+            const found = months.find(m => m.month === idate.getMonth() && m.year === idate.getFullYear());
+            if (found) found.revenue += i.amount;
         });
 
-        // Add salary transactions (advances/payouts) to monthly expenses
-        salaryTransactions.forEach(st => {
-            const entryDate = new Date(st.date);
-            const monthName = entryDate.toLocaleString('default', { month: 'short' });
-            if (data[monthName]) data[monthName].expenses += st.amount;
+        [...expenses, ...salaryTransactions].forEach(e => {
+            const edate = new Date(e.date);
+            const found = months.find(m => m.month === edate.getMonth() && m.year === edate.getFullYear());
+            if (found) found.burn += e.amount;
         });
 
-        return Object.entries(data).map(([name, values]) => ({ name, ...values })).reverse();
-    }, [income, expenses, salaryTransactions, selectedDate]);
-
-    const currentMonthRecords = useMemo(() => {
-        const date = new Date(selectedDate);
-        const month = date.getMonth();
-        const year = date.getFullYear();
-
-        const monthlyIncome = income.filter(i => {
-            const d = new Date(i.date);
-            return d.getMonth() === month && d.getFullYear() === year;
-        });
-        const monthlyExpenses = expenses.filter(e => {
-            const d = new Date(e.date);
-            return d.getMonth() === month && d.getFullYear() === year;
-        });
-        const monthlyTxs = salaryTransactions.filter(st => {
-            const d = new Date(st.date);
-            return d.getMonth() === month && d.getFullYear() === year;
-        });
-
-        const totalIncome = monthlyIncome.reduce((s, c) => s + c.amount, 0);
-        const totalExpenses = monthlyExpenses.reduce((s, c) => s + c.amount, 0) + monthlyTxs.reduce((s, c) => s + c.amount, 0);
-
-        return {
-            income: monthlyIncome,
-            expenses: [...monthlyExpenses, ...monthlyTxs.map(tx => ({ ...tx, category: 'Payroll/Advance', notes: `Processed for staff ID: ${tx.staff_id}` }))],
-            totalIncome,
-            totalExpenses,
-            monthName: getMonthName(month)
-        };
-    }, [income, expenses, salaryTransactions, selectedDate]);
-
-    const handleDateTrigger = () => {
-        const input = dateInputRef.current;
-        if (input) {
-            try {
-                input.focus();
-                if ('showPicker' in input) { 
-                    (input as any).showPicker(); 
-                } else { 
-                    (input as any).click(); 
-                }
-            } catch (e) { 
-                (input as any).click(); 
-            }
-        }
-    };
+        return months;
+    }, [income, expenses, salaryTransactions]);
 
     return (
-        <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-1000 pb-20">
-            {/* Top Bar Enhanced */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
-                <div className="space-y-3">
+        <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-1000 pb-32">
+            {/* Header / Intro */}
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-10">
+                <div className="space-y-4">
                     <div className="flex items-center gap-3">
-                        <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_12px_#10b981] animate-pulse"></div>
-                        <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em]">Live Enterprise Stream</h2>
+                        <div className="relative h-2 w-2">
+                            <div className="absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-75"></div>
+                            <div className="relative h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_12px_#10b981]"></div>
+                        </div>
+                        <h2 className="text-[10px] font-black text-primary-500 uppercase tracking-[0.5em]">Network Terminal Active</h2>
                     </div>
-                    <h1 className="text-5xl font-black text-white tracking-tighter">
-                        {greeting}, <span className="text-gray-700">Manager.</span>
+                    <h1 className="text-6xl font-black text-white tracking-tighter leading-none">
+                        {greeting}, <span className="text-gray-700">Principal.</span>
                     </h1>
+                    <p className="text-gray-500 font-medium text-lg flex items-center gap-3">
+                        <Clock size={18} className="text-gray-700" />
+                        {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • System Intelligence Operational
+                    </p>
                 </div>
 
-                <button 
-                    onClick={handleDateTrigger}
-                    className="flex items-center gap-5 px-10 py-6 bg-gray-900 border border-white/5 rounded-[2.5rem] hover:border-primary-500/30 transition-all group shadow-2xl active:scale-95"
-                >
-                    <CalendarIcon size={24} className="text-primary-500 group-hover:rotate-12 transition-transform" />
-                    <div className="text-left">
-                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-1">Ledger View</p>
-                        <p className="text-lg font-black text-white tracking-tight">{isToday ? 'Live Today' : formatDate(selectedDate)}</p>
+                <div className="flex items-center gap-4 bg-gray-900 border border-white/5 p-4 rounded-[3rem] shadow-2xl relative group cursor-pointer" onClick={() => dateInputRef.current?.showPicker()}>
+                    <div className="p-4 bg-white/5 rounded-2xl text-primary-500 group-hover:scale-110 transition-transform">
+                        <CalendarIcon size={24} />
                     </div>
-                </button>
-                <input ref={dateInputRef} type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="absolute opacity-0 pointer-events-none w-0 h-0" />
+                    <div className="pr-6">
+                        <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest mb-1">Fiscal Date</p>
+                        <p className="text-sm font-black text-white uppercase tracking-tighter">{isToday ? 'Live Feed' : formatDate(selectedDate)}</p>
+                    </div>
+                    <input ref={dateInputRef} type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="absolute opacity-0 w-0 h-0" />
+                </div>
             </div>
 
-            {/* Pulse Metrics Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {isLoading ? Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />) : (
-                    <>
-                        <div className="bg-emerald-500/5 p-8 rounded-[3rem] border border-emerald-500/10 group hover:bg-emerald-500/10 transition-all relative overflow-hidden">
-                            <div className="flex justify-between items-start mb-6 relative z-10">
-                                <div className="p-4 bg-emerald-500 text-white rounded-2xl shadow-lg shadow-emerald-500/20"><Coins size={24} strokeWidth={2.5} /></div>
-                                <ArrowUpRight className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-all" size={20} />
-                            </div>
-                            <p className="text-[10px] font-black text-emerald-500/60 uppercase tracking-[0.3em] mb-2">Total Credits</p>
-                            <h3 className="text-3xl font-black text-white tracking-tighter">{formatCurrency(dailyMetrics.income)}</h3>
-                        </div>
-
-                        <div className="bg-rose-500/5 p-8 rounded-[3rem] border border-rose-500/10 group hover:bg-rose-500/10 transition-all relative overflow-hidden">
-                            <div className="flex justify-between items-start mb-6 relative z-10">
-                                <div className="p-4 bg-rose-500 text-white rounded-2xl shadow-lg shadow-rose-500/20"><Receipt size={24} strokeWidth={2.5} /></div>
-                            </div>
-                            <p className="text-[10px] font-black text-rose-500/60 uppercase tracking-[0.3em] mb-2">Total Debits</p>
-                            <h3 className="text-3xl font-black text-white tracking-tighter">{formatCurrency(dailyMetrics.expenses)}</h3>
-                        </div>
-
-                        <div className="bg-primary-500/5 p-8 rounded-[3rem] border border-primary-500/10 group hover:bg-primary-500/10 transition-all relative overflow-hidden">
-                            <div className="flex justify-between items-start mb-6 relative z-10">
-                                <div className="p-4 bg-primary-500 text-white rounded-2xl shadow-lg shadow-primary-600/20"><Wallet size={24} strokeWidth={2.5} /></div>
-                                <span className="text-[10px] font-black text-primary-500 px-3 py-1 bg-primary-500/10 rounded-full">{dailyMetrics.margin}%</span>
-                            </div>
-                            <p className="text-[10px] font-black text-primary-500/60 uppercase tracking-[0.3em] mb-2">Net Yield</p>
-                            <h3 className="text-3xl font-black text-white tracking-tighter">{formatCurrency(dailyMetrics.profit)}</h3>
-                        </div>
-
-                        <div className="bg-purple-500/5 p-8 rounded-[3rem] border border-purple-500/10 group hover:bg-purple-500/10 transition-all relative overflow-hidden">
-                            <div className="flex justify-between items-start mb-6 relative z-10">
-                                <div className="p-4 bg-purple-500 text-white rounded-2xl shadow-lg shadow-purple-500/20"><Users size={24} strokeWidth={2.5} /></div>
-                            </div>
-                            <p className="text-[10px] font-black text-purple-500/60 uppercase tracking-[0.3em] mb-2">HR Presence</p>
-                            <h3 className="text-3xl font-black text-white tracking-tighter">{dailyMetrics.staffPresent}<span className="text-gray-700 mx-2 text-xl">/</span>{dailyMetrics.totalStaff}</h3>
-                        </div>
-                    </>
-                )}
+            {/* Core Pulse Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-8">
+                <MetricCard 
+                    title="Gross Intake" 
+                    value={formatCurrency(dailyMetrics.income)} 
+                    subtext="Real-time cash flow" 
+                    icon={Coins} 
+                    color="#10b981" 
+                    delta={12}
+                />
+                <MetricCard 
+                    title="Operational Burn" 
+                    value={formatCurrency(dailyMetrics.expenses)} 
+                    subtext="Bills & overheads" 
+                    icon={Receipt} 
+                    color="#f43f5e" 
+                    delta={-4}
+                />
+                <MetricCard 
+                    title="Net Yield" 
+                    value={formatCurrency(dailyMetrics.profit)} 
+                    subtext={`Margin Efficiency: ${dailyMetrics.margin}%`} 
+                    icon={Wallet} 
+                    color="#3b82f6" 
+                    delta={8}
+                />
+                <MetricCard 
+                    title="HR Capacity" 
+                    value={`${dailyMetrics.staffPresent} / ${dailyMetrics.totalStaff}`} 
+                    subtext="Staff presence ratio" 
+                    icon={Users} 
+                    color="#a855f7" 
+                />
             </div>
 
-            {/* Main Content Area */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 bg-gray-900/50 p-10 rounded-[4rem] border border-white/5 shadow-2xl">
+            {/* Analytics Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                <div className="lg:col-span-2 bg-gray-900/40 p-10 sm:p-12 rounded-[4rem] border border-white/5 shadow-2xl backdrop-blur-3xl">
                     <div className="flex items-center justify-between mb-12">
                         <div>
-                            <h3 className="text-xl font-black text-white tracking-tight">Growth Trajectory</h3>
-                            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">Rolling 6-Month Comparison</p>
+                            <h3 className="text-2xl font-black text-white tracking-tight uppercase">Revenue Trajectory</h3>
+                            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">H1 Fiscal Performance Visualization</p>
                         </div>
-                        <Link to="/reports" className="p-4 bg-white/5 rounded-2xl text-primary-500 hover:bg-primary-500 hover:text-white transition-all">
-                            <Activity size={20} />
-                        </Link>
+                        <div className="flex gap-4">
+                            <div className="flex items-center gap-2">
+                                <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
+                                <span className="text-[9px] font-black text-gray-500 uppercase">Inbound</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="h-2 w-2 rounded-full bg-primary-500"></div>
+                                <span className="text-[9px] font-black text-gray-500 uppercase">Outbound</span>
+                            </div>
+                        </div>
                     </div>
-                    <div className="h-[380px]">
+                    <div className="h-[400px]">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={monthlySummary} barGap={8}>
-                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#4b5563', fontWeight: 800, fontSize: 10}} dy={10} />
-                                <YAxis hide />
+                            <AreaChart data={chartData}>
+                                <defs>
+                                    <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                    </linearGradient>
+                                    <linearGradient id="colorBurn" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
+                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#4b5563', fontWeight: 900, fontSize: 10}} dy={15} />
+                                <YAxis hide domain={[0, 'auto']} />
                                 <Tooltip 
-                                    contentStyle={{backgroundColor: '#111827', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.05)', fontWeight: '900'}}
-                                    cursor={{fill: 'rgba(255,255,255,0.02)'}}
+                                    contentStyle={{backgroundColor: '#0a0f1d', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.05)', fontWeight: '900', fontSize: '12px'}}
+                                    cursor={{stroke: 'rgba(255,255,255,0.1)', strokeWidth: 2}}
                                 />
-                                <Bar dataKey="income" fill="#10b981" radius={[8, 8, 0, 0]} barSize={28} />
-                                <Bar dataKey="expenses" fill="#ef4444" radius={[8, 8, 0, 0]} barSize={28} />
-                            </BarChart>
+                                <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={4} fillOpacity={1} fill="url(#colorRev)" />
+                                <Area type="monotone" dataKey="burn" stroke="#3b82f6" strokeWidth={4} fillOpacity={1} fill="url(#colorBurn)" />
+                            </AreaChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                <div className="space-y-6">
-                    <div className="bg-primary-600 p-10 rounded-[4rem] text-white shadow-2xl shadow-primary-600/20 relative overflow-hidden group">
-                        <div className="absolute -right-8 -bottom-8 opacity-10 group-hover:scale-110 transition-transform duration-700"><Sparkles size={200} /></div>
-                        <h3 className="text-2xl font-black tracking-tighter mb-4">{currentMonthRecords.monthName} Snap</h3>
-                        <div className="space-y-2 mb-8">
-                            <p className="text-xs font-bold opacity-80 leading-relaxed">Credits: {formatCurrency(currentMonthRecords.totalIncome)}</p>
-                            <p className="text-xs font-bold opacity-80 leading-relaxed">Debits: {formatCurrency(currentMonthRecords.totalExpenses)}</p>
-                        </div>
-                        <button 
-                            onClick={() => setShowMonthlyModal(true)}
-                            className="flex items-center gap-3 px-8 py-4 bg-white/20 backdrop-blur-md rounded-[2rem] text-[10px] font-black uppercase tracking-widest hover:bg-white/30 transition-all"
-                        >
-                            View Monthly Ledger <ChevronRight size={14} />
-                        </button>
+                {/* Operations Feed */}
+                <div className="bg-gray-900/40 p-10 rounded-[4rem] border border-white/5 shadow-2xl flex flex-col h-full">
+                    <div className="flex items-center justify-between mb-10">
+                        <h3 className="text-sm font-black text-white uppercase tracking-[0.2em] flex items-center gap-3">
+                            <Activity size={18} className="text-primary-500" /> Live Feed
+                        </h3>
+                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981] animate-pulse"></div>
                     </div>
+                    <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-2">
+                        {liveFeed.map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-6 bg-white/[0.02] border border-white/5 rounded-3xl group hover:bg-white/[0.05] transition-all">
+                                <div className="flex items-center gap-5">
+                                    <div className="p-3.5 rounded-2xl group-hover:scale-110 transition-transform" style={{ backgroundColor: `${(item as any).color}15`, color: (item as any).color }}>
+                                        {(item as any).type === 'CR' ? <ArrowUpRight size={18} /> : <ArrowDownRight size={18} />}
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-black text-white tracking-tight">{(item as any).category}</p>
+                                        <p className="text-[9px] font-bold text-gray-600 uppercase tracking-widest mt-1">{formatDate(item.date)}</p>
+                                    </div>
+                                </div>
+                                <p className={`text-sm font-black ${(item as any).type === 'CR' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                    {(item as any).type === 'CR' ? '+' : '-'}{formatCurrency(item.amount)}
+                                </p>
+                            </div>
+                        ))}
+                        {liveFeed.length === 0 && (
+                            <div className="flex flex-col items-center justify-center h-full opacity-20">
+                                <Target size={64} className="mb-4" />
+                                <p className="text-[10px] font-black uppercase tracking-widest">Awaiting Logs...</p>
+                            </div>
+                        )}
+                    </div>
+                    <Link to="/reports" className="mt-10 w-full py-5 bg-primary-600 rounded-[2rem] text-white text-[10px] font-black uppercase tracking-[0.3em] flex items-center justify-center gap-3 hover:bg-primary-500 transition-all shadow-xl shadow-primary-600/20 active:scale-95">
+                        Audit Detailed Logs <ChevronRight size={16} />
+                    </Link>
+                </div>
+            </div>
 
-                    <div className="bg-gray-900 p-8 rounded-[4rem] border border-white/5">
-                        <div className="flex items-center gap-4 mb-8">
-                            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl"><TrendingUp size={18} /></div>
-                            <h4 className="text-xs font-black text-white uppercase tracking-widest">Active Status</h4>
+            {/* Quick Actions / Ecosystem */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+                <div className="bg-primary-600 p-10 rounded-[4rem] text-white shadow-2xl shadow-primary-600/30 flex flex-col justify-between group overflow-hidden relative">
+                    <div className="absolute -right-10 -top-10 opacity-10 group-hover:scale-125 transition-transform duration-1000">
+                        <Zap size={240} />
+                    </div>
+                    <div className="relative z-10">
+                        <h4 className="text-2xl font-black uppercase tracking-tighter mb-2">Instant Enrollment</h4>
+                        <p className="text-xs font-bold opacity-70 leading-relaxed mb-10">Add new staff members to the cloud directory in seconds.</p>
+                    </div>
+                    <Link to="/staff" className="relative z-10 w-fit px-8 py-4 bg-white text-primary-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-transform active:scale-95">
+                        Open Directory
+                    </Link>
+                </div>
+
+                <div className="sm:col-span-2 bg-gray-900/40 p-10 rounded-[4rem] border border-white/5 flex flex-col md:flex-row items-center justify-between gap-10">
+                    <div className="flex items-center gap-8">
+                        <div className="p-8 bg-white/5 rounded-[3rem] border border-white/5">
+                            <Sparkles size={48} className="text-primary-500" />
                         </div>
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center p-5 bg-white/5 rounded-[2rem] border border-transparent hover:border-white/5 transition-all">
-                                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Database Sync</span>
-                                <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></span>
-                            </div>
-                            <div className="flex justify-between items-center p-5 bg-white/5 rounded-[2rem] border border-transparent hover:border-white/5 transition-all">
-                                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Personnel Logs</span>
-                                <span className="text-[10px] font-black text-white">{staff.length} Active</span>
-                            </div>
+                        <div>
+                            <h4 className="text-2xl font-black text-white uppercase tracking-tighter">Business Health</h4>
+                            <p className="text-xs font-bold text-gray-500 max-w-sm mt-2">Your operational efficiency is up by 12% compared to last month. All systems are green.</p>
+                        </div>
+                    </div>
+                    <div className="flex gap-4">
+                        <div className="p-6 bg-black/40 rounded-3xl border border-white/5 text-center min-w-[120px]">
+                            <p className="text-2xl font-black text-white">98%</p>
+                            <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest mt-1">Uptime</p>
+                        </div>
+                        <div className="p-6 bg-black/40 rounded-3xl border border-white/5 text-center min-w-[120px]">
+                            <p className="text-2xl font-black text-white">4.9</p>
+                            <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest mt-1">Audit Score</p>
                         </div>
                     </div>
                 </div>
             </div>
-
-            {/* Monthly Ledger Modal */}
-            <Modal isOpen={showMonthlyModal} onClose={() => setShowMonthlyModal(false)} title={`${currentMonthRecords.monthName} Financial deep-dive`}>
-                <div className="space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar pr-2">
-                    <div className="grid grid-cols-2 gap-4 sticky top-0 bg-gray-900 z-10 pb-4">
-                        <div className="p-6 bg-emerald-500/10 rounded-3xl border border-emerald-500/10">
-                            <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-1">Total Income</p>
-                            <p className="text-xl font-black text-white">{formatCurrency(currentMonthRecords.totalIncome)}</p>
-                        </div>
-                        <div className="p-6 bg-rose-500/10 rounded-3xl border border-rose-500/10">
-                            <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest mb-1">Total Expenses</p>
-                            <p className="text-xl font-black text-white">{formatCurrency(currentMonthRecords.totalExpenses)}</p>
-                        </div>
-                    </div>
-
-                    <div className="space-y-4">
-                        <h4 className="text-[11px] font-black text-gray-500 uppercase tracking-[0.3em] px-2 mb-4">Itemized Transactions</h4>
-                        {[...currentMonthRecords.income.map(i => ({ ...i, type: 'income' })), ...currentMonthRecords.expenses.map(e => ({ ...e, type: 'expense' }))]
-                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                            .map((item, idx) => (
-                                <div key={idx} className="flex items-center justify-between p-5 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/[0.08] transition-all">
-                                    <div className="flex items-center gap-4">
-                                        <div className={`p-3 rounded-xl ${item.type === 'income' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                                            {item.type === 'income' ? <TrendingUp size={16} /> : <TrendingUp size={16} className="rotate-180" />}
-                                        </div>
-                                        <div>
-                                            <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">{formatDate(item.date)}</p>
-                                            <p className="text-xs font-black text-white">{item.source || (item as any).category || 'General'}</p>
-                                            <p className="text-[9px] font-bold text-gray-600 italic">{(item as any).notes || (item as any).note || 'Audit note empty'}</p>
-                                        </div>
-                                    </div>
-                                    <p className={`text-sm font-black ${item.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                        {item.type === 'income' ? '+' : '-'}{formatCurrency(item.amount)}
-                                    </p>
-                                </div>
-                            ))
-                        }
-                        {currentMonthRecords.income.length === 0 && currentMonthRecords.expenses.length === 0 && (
-                            <div className="py-20 text-center">
-                                <PieChart size={40} className="mx-auto text-gray-800 mb-4 opacity-20" />
-                                <p className="text-[10px] font-black text-gray-700 uppercase tracking-[0.4em]">Zero data points for this month</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </Modal>
         </div>
     );
 }
